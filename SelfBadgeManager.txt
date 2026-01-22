@@ -1,0 +1,123 @@
+import definePlugin from "@utils/types";
+import { findByProps } from "@webpack";
+import { React, Forms } from "@webpack/common";
+import { Settings } from "@api/Settings";
+
+const BADGE_SIZE = 18;
+
+// 🔒 REPLACE WITH YOUR DISCORD USER ID
+const OWNER_ID = "757872173791576165";
+
+// 👑 CREATOR BADGE (VISIBLE TO ALL PLUGIN USERS)
+const CREATOR_BADGE = {
+    id: "self_badge_manager_creator",
+    description: "SelfBadgeManager Creator",
+    icon: "https://cdn.discordapp.com/attachments/1123005968226209943/1405261917785821357/dancing_fungus-1.gif?ex=6973c2a5&is=69727125&hm=1f67da9e3e60368312fc0974e8c8352e4f67b4a02dda5fea6cdbd2acd49411dc&",
+    size: BADGE_SIZE
+};
+
+// 🏛️ DISCORD BADGES (LEGACY + CURRENT)
+const DiscordBadges = [
+    { id: "staff", label: "Discord Staff", icon: "https://cdn.discordapp.com/badge-icons/5e74e9b61934fc1f67c65515d1f7e60d.svg" },
+    { id: "partner", label: "Partner", icon: "https://cdn.discordapp.com/badge-icons/3f9748e53446a137a052f3454e2de41e.svg" },
+    { id: "hypesquad", label: "HypeSquad", icon: "https://cdn.discordapp.com/badge-icons/8a88d63823d8a71cd5e390baa45efa02.svg" },
+    { id: "bughunter1", label: "Bug Hunter", icon: "https://cdn.discordapp.com/badge-icons/2717692c7dca7289b35297368a940dd0.svg" },
+    { id: "bughunter2", label: "Bug Hunter Gold", icon: "https://cdn.discordapp.com/badge-icons/848f79194d4be5ff5f81505cbd0ce1e6.svg" },
+    { id: "verifiedbotdev", label: "Verified Bot Developer", icon: "https://cdn.discordapp.com/badge-icons/6df5892e0f35b051f8b61eace34f4967.svg" },
+    { id: "early_supporter", label: "Early Supporter", icon: "https://cdn.discordapp.com/badge-icons/7060786766c9c840eb3019e725d2b358.svg" }
+];
+
+// ⚙️ SETTINGS
+const settings = Settings.definePluginSettings({
+    equipped: {
+        type: "string[]",
+        default: []
+    },
+    customBadges: {
+        type: "json",
+        default: []
+    }
+});
+
+export default definePlugin({
+    name: "SelfBadgeManager",
+    description: "Equip Discord badges and show a creator badge on the plugin author's profile",
+    authors: [{ name: "You", id: 0 }],
+    settings,
+
+    start() {
+        const BadgeModule = findByProps("getBadges");
+        if (!BadgeModule) return;
+
+        const original = BadgeModule.getBadges;
+
+        BadgeModule.getBadges = (userId: string) => {
+            const badges = [...original(userId)];
+
+            // 👑 ALWAYS show creator badge on your profile (for anyone with plugin)
+            if (userId === OWNER_ID) {
+                badges.push(CREATOR_BADGE);
+            }
+
+            // 🔒 EXTRA BADGES ONLY FOR YOU
+            if (userId === OWNER_ID) {
+                const equipped = settings.store.equipped;
+                const custom = settings.store.customBadges;
+
+                const injected = [
+                    ...DiscordBadges
+                        .filter(b => equipped.includes(b.id))
+                        .map(b => ({
+                            id: b.id,
+                            description: b.label,
+                            icon: b.icon,
+                            size: BADGE_SIZE
+                        })),
+                    ...custom.map((b: any) => ({
+                        id: b.id,
+                        description: b.label,
+                        icon: b.icon,
+                        size: BADGE_SIZE
+                    }))
+                ];
+
+                return [...badges, ...injected];
+            }
+
+            return badges;
+        };
+
+        (BadgeModule.getBadges as any).__original = original;
+    },
+
+    stop() {
+        const BadgeModule = findByProps("getBadges");
+        if (BadgeModule?.getBadges?.__original) {
+            BadgeModule.getBadges = BadgeModule.getBadges.__original;
+        }
+    },
+
+    settingsPanel() {
+        return (
+            <Forms.FormSection title="SelfBadgeManager">
+                <Forms.FormText>
+                    Equip Discord badges for yourself. The creator badge is always visible on the author's profile.
+                </Forms.FormText>
+
+                {DiscordBadges.map(b => (
+                    <Forms.FormSwitch
+                        key={b.id}
+                        value={settings.store.equipped.includes(b.id)}
+                        onChange={v => {
+                            settings.store.equipped = v
+                                ? [...settings.store.equipped, b.id]
+                                : settings.store.equipped.filter(id => id !== b.id);
+                        }}
+                    >
+                        {b.label}
+                    </Forms.FormSwitch>
+                ))}
+            </Forms.FormSection>
+        );
+    }
+});
